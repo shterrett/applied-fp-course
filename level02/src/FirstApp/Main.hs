@@ -8,17 +8,22 @@ import           Network.Wai.Handler.Warp (run)
 
 import           Network.HTTP.Types       (Status, hContentType, status200,
                                            status400, status404)
+import Network.HTTP.Types.Header (ResponseHeaders)
 
 import qualified Data.ByteString.Lazy     as LBS
+import Data.ByteString.Lazy.Char8 (pack)
 
 import           Data.Either              (either)
 
 import           Data.Text                (Text)
 import           Data.Text.Encoding       (decodeUtf8)
 
-import           FirstApp.Types           (ContentType, Error, RqType,
-                                           mkCommentText, mkTopic,
-                                           renderContentType)
+import           FirstApp.Types           ( ContentType(PlainText)
+                                          , Error(EmptyTopicTitle , EmptyComment, PageNotFound)
+                                          , RqType(AddRq, ViewRq, ListRq)
+                                          , mkCommentText
+                                          , mkTopic
+                                          , renderContentType)
 
 -- --------------------------------------------
 -- - Don't start here, go to FirstApp.Types!  -
@@ -60,8 +65,7 @@ mkAddRequest
   :: Text
   -> LBS.ByteString
   -> Either Error RqType
-mkAddRequest =
-  error "mkAddRequest not implemented"
+mkAddRequest topic comment = AddRq <$> mkTopic topic <*> mkCommentText (lazyByteStringToStrictText comment)
   where
     -- This is a helper function to assist us in going from a Lazy ByteString, to a Strict Text
     lazyByteStringToStrictText =
@@ -74,19 +78,24 @@ mkAddRequest =
 mkViewRequest
   :: Text
   -> Either Error RqType
-mkViewRequest =
-  error "mkViewRequest not implemented"
+mkViewRequest topic = ViewRq <$> mkTopic topic
 
 mkListRequest
   :: Either Error RqType
-mkListRequest =
-  error "mkListRequest not implemented"
+mkListRequest = Right ListRq
 
 mkErrorResponse
   :: Error
   -> Response
-mkErrorResponse =
-  error "mkErrorResponse not implemented"
+mkErrorResponse e = responseLBS (errorToStatus e) (buildHeaders PlainText) (pack $ show e)
+
+errorToStatus :: Error -> Status
+errorToStatus EmptyTopicTitle = status400
+errorToStatus EmptyComment = status400
+errorToStatus PageNotFound = status404
+
+buildHeaders :: ContentType -> ResponseHeaders
+buildHeaders c = [("Content-Type", renderContentType c)]
 
 -- Use our ``RqType`` helpers to write a function that will take the input
 -- ``Request`` from the Wai library and turn it into something our application
@@ -94,10 +103,14 @@ mkErrorResponse =
 mkRequest
   :: Request
   -> IO ( Either Error RqType )
-mkRequest =
   -- Remembering your pattern-matching skills will let you implement the entire
   -- specification in this function.
-  error "mkRequest not implemented"
+mkRequest req =
+    case (pathInfo req) of
+        ["list"] -> return $ mkListRequest
+        [topic, "view"] -> return $ mkViewRequest topic
+        [topic, "add"] -> return $ mkAddRequest topic "dummy comment body"
+        _ -> return $ Left PageNotFound
 
 -- If we find that we need more information to handle a request, or we have a
 -- new type of request that we'd like to handle then we update the ``RqType``
@@ -113,15 +126,21 @@ mkRequest =
 handleRequest
   :: RqType
   -> Either Error Response
-handleRequest =
-  error "handleRequest not implemented"
+handleRequest ListRq = Right $
+  responseLBS status200 (buildHeaders PlainText) "List not implemented"
+handleRequest (AddRq _ _) = Right $
+  responseLBS status200 (buildHeaders PlainText) "Add not implemented"
+handleRequest (ViewRq _) = Right $
+  responseLBS status200 (buildHeaders PlainText) "View not implemented"
 
 -- Reimplement this function using the new functions and ``RqType`` constructors
 -- as a guide.
 app
   :: Application
-app =
-  error "app not reimplemented"
-
+app req respond =
+    let
+      respOrError = ((=<<) handleRequest) <$> mkRequest req
+    in
+      (either mkErrorResponse id <$> respOrError) >>= respond
 runApp :: IO ()
 runApp = run 3000 app
