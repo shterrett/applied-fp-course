@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 module FirstApp.Types
   ( Error (..)
+  , mkDBError
   , RqType (..)
   , ContentType (..)
   , Topic
@@ -18,6 +19,7 @@ module FirstApp.Types
 
 import           GHC.Generics               (Generic)
 
+import           Data.Char                  (toLower)
 import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
 
@@ -30,13 +32,18 @@ import qualified Data.Aeson.Types           as A
 
 import           Data.Time                  (UTCTime)
 
-import           FirstApp.DB.Types          (DBComment)
+import           FirstApp.DB.Types          (DBComment( dbCommentId
+                                                      , dbCommentTopic
+                                                      , dbCommentBody
+                                                      , dbCommentTime))
 import           FirstApp.Types.CommentText (CommentText, mkCommentText
                                             , getCommentText)
-import           FirstApp.Types.Error       (Error( UnknownRoute
-                                                  , EmptyCommentText
-                                                  , EmptyTopic
-                                                  )
+import           FirstApp.Types.Error       ( Error( UnknownRoute
+                                                   , EmptyCommentText
+                                                   , EmptyTopic
+                                                   , DBError
+                                                   )
+                                            , mkDBError
                                             )
 import           FirstApp.Types.Topic       (Topic, mkTopic, getTopic)
 
@@ -71,8 +78,8 @@ data Comment = Comment
 modFieldLabel
   :: String
   -> String
-modFieldLabel =
-  error "modFieldLabel not implemented"
+modFieldLabel label = fromMaybe label $
+  (fmap toLower) <$> stripPrefix "comment" label
 
 instance ToJSON Comment where
   -- This is one place where we can take advantage of our `Generic` instance.
@@ -97,8 +104,11 @@ instance ToJSON Comment where
 fromDbComment
   :: DBComment
   -> Either Error Comment
-fromDbComment =
-  error "fromDbComment not yet implemented"
+fromDbComment dbC = 
+    Comment (CommentId $ dbCommentId dbC) <$>
+      mkTopic (dbCommentTopic dbC) <*>
+      mkCommentText (dbCommentBody dbC) <*>
+      (Right $ dbCommentTime dbC)
 
 data RqType
   = AddRq Topic CommentText

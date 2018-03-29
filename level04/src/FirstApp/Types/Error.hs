@@ -1,15 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module FirstApp.Types.Error (Error(..), nonEmptyText) where
+module FirstApp.Types.Error (Error(..), nonEmptyText, mkDBError) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
 data Error
   = UnknownRoute
   | EmptyCommentText
   | EmptyTopic
-  -- We need another constructor for our DB error types.
+  | DBError String
   deriving (Eq, Show)
+
+mkDBError :: SQLiteResponse -> Error
+mkDBError = DBError . show
 
 nonEmptyText
   :: (Text -> a)
