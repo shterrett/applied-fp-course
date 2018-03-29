@@ -7,11 +7,15 @@ module FirstApp.Conf
 import           GHC.Word                  (Word16)
 
 import           Data.Bifunctor            (first)
-import           Data.Monoid               ((<>))
+import           Data.Monoid               ((<>)
+                                           , mconcat
+                                           , Last(Last, getLast))
 
-import           FirstApp.Types            (Conf, ConfigError,
-                                            DBFilePath (DBFilePath),
-                                            PartialConf, Port (Port))
+import           FirstApp.Types            ( Conf(Conf)
+                                           , ConfigError(NoPort, NoDb)
+                                           , DBFilePath (DBFilePath)
+                                           , PartialConf(PartialConf)
+                                           , Port (Port))
 
 import           FirstApp.Conf.CommandLine (commandLineParser)
 import           FirstApp.Conf.File        (parseJSONConfigFile)
@@ -21,8 +25,8 @@ import           FirstApp.Conf.File        (parseJSONConfigFile)
 -- configuration values from either the file or command line inputs.
 defaultConf
   :: PartialConf
-defaultConf =
-  error "defaultConf not implemented"
+defaultConf = PartialConf (mkLast $ Port 8080) (mkLast $ DBFilePath "app_db.db")
+  where mkLast = Last . Just
 
 -- We need something that will take our PartialConf and see if can finally build
 -- a complete ``Conf`` record. Also we need to highlight any missing values by
@@ -30,8 +34,12 @@ defaultConf =
 makeConfig
   :: PartialConf
   -> Either ConfigError Conf
-makeConfig =
-  error "makeConfig not implemented"
+makeConfig (PartialConf p db) =
+    failWith NoPort p Conf >>=
+      failWith NoDb db
+    where failWith e m f = case getLast (f <$> m) of
+                           Just r -> Right r
+                           Nothing -> Left e
 
 -- This is the function we'll actually export for building our configuration.
 -- Since it wraps all our efforts to read information from the command line, and
@@ -46,9 +54,11 @@ makeConfig =
 parseOptions
   :: FilePath
   -> IO (Either ConfigError Conf)
-parseOptions =
+parseOptions path = do
+    fmCmd <- commandLineParser
+    fmFile <- parseJSONConfigFile path
+    return $ (fmap $ mconcat) (sequence [Right defaultConf, fmFile, Right fmCmd]) >>= makeConfig
   -- Parse the options from the config file: "appconfig.json"
   -- Parse the options from the commandline using 'commandLineParser'
   -- Combine these with the default configuration 'defaultConf'
   -- Return the final configuration value
-  error "parseOptions not implemented"

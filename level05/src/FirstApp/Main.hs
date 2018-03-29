@@ -31,17 +31,22 @@ import qualified Data.Aeson                         as A
 
 import qualified FirstApp.Conf                      as Conf
 import qualified FirstApp.DB                        as DB
-import           FirstApp.Types                     (Conf, ContentType (..),
+import           FirstApp.Types                     (Conf(dbPath), ContentType (..),
+                                                     confPortToWai,
                                                      Error (..),
+                                                     ConfigError,
                                                      RqType (AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic,
-                                                     renderContentType)
+                                                     renderContentType, getDBFilePath)
+import           Data.Bifunctor                     (first)
+import           Control.Monad                      (liftM)
 
 -- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
 -- single type so that we can deal with the entire start-up process as a whole.
 data StartUpError
   = DbInitErr SQLiteResponse
+    | InitialConfigError ConfigError
   deriving Show
 
 runApp :: IO ()
@@ -50,8 +55,8 @@ runApp = do
   cfgE <- prepareAppReqs
   -- Loading the configuration can fail, so we have to take that into account now.
   case cfgE of
-    Left err   -> undefined
-    Right _cfg -> run undefined undefined
+    Left err   -> putStrLn (show err)
+    Right (cfg', db) -> run (confPortToWai cfg') (app cfg' db)
 
 -- We need to complete the following steps to prepare our app requirements:
 --
@@ -63,8 +68,15 @@ runApp = do
 --
 prepareAppReqs
   :: IO ( Either StartUpError ( Conf, DB.FirstAppDB ) )
-prepareAppReqs =
-  error "copy your prepareAppReqs from the previous level."
+prepareAppReqs = do
+    cfg <- liftM (first InitialConfigError) $ Conf.parseOptions "appconfig.json"
+    db <- case cfg of
+            (Left e) -> return (Left e) :: IO (Either StartUpError DB.FirstAppDB)
+            (Right cfg') -> initDB cfg'
+    return $ (,) <$> cfg <*> db
+    where
+      initDB :: Conf -> IO (Either StartUpError DB.FirstAppDB)
+      initDB = ((fmap . first) DbInitErr) . DB.initDB . getDBFilePath . dbPath
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse

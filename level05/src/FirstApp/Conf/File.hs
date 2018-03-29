@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module FirstApp.Conf.File where
 
+import           Control.Exception          ( catch
+                                            , throwIO)
+import           Control.Monad (liftM)
+import           System.IO.Error            (isDoesNotExistError)
 import           Data.ByteString.Lazy       (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
@@ -9,13 +13,11 @@ import           Data.Text                  (Text)
 import           Data.Bifunctor             (first)
 import           Data.Monoid                (Last (Last))
 
-import           Control.Exception          (try)
-
 import           Data.Aeson                 (FromJSON, Object)
 
 import qualified Data.Aeson                 as Aeson
 
-import           FirstApp.Types             (ConfigError,
+import           FirstApp.Types             (ConfigError(MissingConfig, JsonDecodeErr),
                                              PartialConf (PartialConf))
 -- Doctest setup section
 -- $setup
@@ -33,20 +35,21 @@ import           FirstApp.Types             (ConfigError,
 --
 -- | readConfFile
 -- >>> readConfFile "badFileName.no"
--- Left (undefined "badFileName.no: openBinaryFile: does not exist (No such file or directory)")
+-- Left (MissingConfig badFileName.no: openBinaryFile: does not exist (No such file or directory))
 -- >>> readConfFile "test.json"
 -- Right "{\n  \"foo\": 33\n}\n"
 --
 readConfFile
   :: FilePath
   -> IO ( Either ConfigError ByteString )
-readConfFile =
-  error "readConfFile not implemented"
+readConfFile path = (Right <$> LBS.readFile path) `catch` handleError
+  where handleError e | isDoesNotExistError e = return $ Left (MissingConfig e)
+                      | otherwise = throwIO e
 
 -- Construct the function that will take a ``FilePath``, read it in, decode it,
 -- and construct our ``PartialConf``.
 parseJSONConfigFile
   :: FilePath
   -> IO ( Either ConfigError PartialConf )
-parseJSONConfigFile =
-  error "parseJSONConfigFile not implemented"
+parseJSONConfigFile path = do
+    liftM ((=<<) (first JsonDecodeErr . Aeson.eitherDecode')) (readConfFile path)
