@@ -25,15 +25,22 @@ import qualified Database.SQLite.Simple             as Sql
 import qualified Database.SQLite.SimpleErrors       as Sql
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
-import           FirstApp.AppM                      (AppM, Env (envDB))
+import           FirstApp.AppM                      ( AppM(AppM)
+                                                    , Env (envDB, envConfig)
+                                                    )
 
-import           FirstApp.Types                     (Comment, CommentText,
-                                                     DBFilePath (getDBFilePath),
-                                                     Error (DBError),
-                                                     FirstAppDB (FirstAppDB, dbConn),
-                                                     Topic, fromDbComment,
-                                                     getCommentText, getTopic,
-                                                     mkTopic)
+import           FirstApp.Types                     ( Comment
+                                                    , CommentText
+                                                    , DBFilePath (getDBFilePath)
+                                                    , Error (DBError)
+                                                    , FirstAppDB (FirstAppDB, dbConn)
+                                                    , Topic
+                                                    , fromDbComment
+                                                    , getCommentText
+                                                    , getTopic
+                                                    , mkTopic
+                                                    , Conf (dbFilePath)
+                                                    )
 
 -- Quick helper to pull the connection and close it down.
 closeDB
@@ -62,36 +69,52 @@ initDB fp = Sql.runDBAction $ do
 
 getDBConn
   :: AppM Connection
-getDBConn =
-  error "getDBConn not implemented"
+getDBConn = AppM $ Sql.open . getDBFilePath . dbFilePath . envConfig
 
 runDB
   :: (a -> Either Error b)
   -> (Connection -> IO a)
   -> AppM (Either Error b)
-runDB =
-  error "runDB not re-implemented"
+runDB f g = AppM (\env -> (fmap f) $ (g . dbConn . envDB) env)
 
 getComments
   :: Topic
   -> AppM (Either Error [Comment])
-getComments =
-  error "Copy your completed 'getComments' and refactor to match the new type signature"
+getComments t =
+  let
+    q = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
+  in
+    runDB (traverse fromDbComment)
+          (\conn -> Sql.query conn q (Sql.Only . getTopic $ t))
 
 addCommentToTopic
   :: Topic
   -> CommentText
   -> AppM (Either Error ())
-addCommentToTopic =
-  error "Copy your completed 'appCommentToTopic' and refactor to match the new type signature"
+addCommentToTopic t c =
+  let
+    q = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
+  in runDB Right
+           (\conn -> getCurrentTime >>=
+                    (\nowish -> Sql.execute conn
+                                            q
+                                            (getTopic t, getCommentText c, nowish)))
 
 getTopics
   :: AppM (Either Error [Topic])
 getTopics =
-  error "Copy your completed 'getTopics' and refactor to match the new type signature"
+  let
+    q = "SELECT DISTINCT topic FROM comments"
+  in
+    runDB (traverse $ mkTopic . Sql.fromOnly)
+          (\conn -> Sql.query_ conn q)
 
 deleteTopic
   :: Topic
   -> AppM (Either Error ())
-deleteTopic =
-  error "Copy your completed 'deleteTopic' and refactor to match the new type signature"
+deleteTopic t =
+  let
+    q = "DELETE FROM comments WHERE topic = ?"
+  in
+    runDB Right
+          (\conn -> Sql.execute conn q (Sql.Only . getTopic $ t))

@@ -44,7 +44,10 @@ import           FirstApp.Types                     (Conf (dbFilePath),
                                                      confPortToWai,
                                                      mkCommentText, mkTopic)
 
-import           FirstApp.AppM                      (AppM, Env (Env, envConfig, envDB, envLoggingFn))
+import           FirstApp.AppM                      ( AppM
+                                                    , Env (Env, envConfig, envDB, envLoggingFn)
+                                                    , runAppM
+                                                    )
 
 -- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
@@ -105,8 +108,12 @@ prepareAppReqs = do
 app
   :: Env
   -> Application
-app =
-  error "Copy your completed 'app' from the previous level and refactor it here"
+app env rq cb = do
+    resp <- runAppM (mkRequest rq >>=
+                      either mkErrorResponse
+                             (\r -> handleRequest r >>= either mkErrorResponse return))
+                    env
+    cb resp
 
 handleRequest
   :: RqType
