@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Control.Monad.Reader (ask, reader)
+import           Control.Monad.Reader (ask, asks, reader)
 
 import           Control.Monad        (join)
 
@@ -80,6 +80,11 @@ appMTests env = describe "AppM Tests" $ do
 
     r <- AppM.runAppM ( reader getDBfilepath ) env
     r `shouldBe` (getDBfilepath env)
+
+  it "uses bind directly to run IO functions" $ do
+    let g = ask >>= flip AppM.envLoggingFn "In a test"
+    r <- AppM.runAppM g env
+    r `shouldBe` ()
 
   it "should let us run IO functions" $ do
     let fn = do

@@ -69,13 +69,13 @@ initDB fp = Sql.runDBAction $ do
 
 getDBConn
   :: AppM Connection
-getDBConn = AppM $ Sql.open . getDBFilePath . dbFilePath . envConfig
+getDBConn = asks $ dbConn . envDB
 
 runDB
   :: (a -> Either Error b)
   -> (Connection -> IO a)
   -> AppM (Either Error b)
-runDB f g = AppM (\env -> (fmap f) $ (g . dbConn . envDB) env)
+runDB f g = asks id >>= (fmap f) . (liftIO . g . dbConn . envDB)
 
 getComments
   :: Topic

@@ -73,14 +73,12 @@ instance Monad AppM where
   -- When it comes to running functions in AppM as a Monad, this will take care
   -- of passing the Env from one function to the next.
   (>>=) :: AppM a -> (a -> AppM b) -> AppM b
-  (>>=) (AppM f) g = AppM (\env ->
-      runAppM ((liftIO $ f env) >>= g) env
-    )
+  (>>=) (AppM f) g = AppM (\env -> f env >>= (\a -> runAppM (g a) env))
 
 instance MonadReader Env AppM where
   -- Return the current Env from the AppM.
   ask :: AppM Env
-  ask = AppM (\env -> return env)
+  ask = AppM $ return . id
 
   -- Run a AppM inside of the current one using a modified Env value.
   local :: (Env -> Env) -> AppM a -> AppM a
