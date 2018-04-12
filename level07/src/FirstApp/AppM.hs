@@ -70,38 +70,45 @@ runAppM (AppM m) =
 
 instance Applicative AppM where
   pure :: a -> AppM a
-  pure  = error "pure for AppM not implemented"
+  pure a = AppM (\_ -> pure (Right a))
 
   (<*>) :: AppM (a -> b) -> AppM a -> AppM b
-  (<*>) = error "ap for AppM not implemented"
+  (<*>) (AppM f) (AppM a) = AppM $
+    (\env -> do
+      f' <- f env
+      a' <- a env
+      return $ f' <*> a')
 
 instance Monad AppM where
   return :: a -> AppM a
-  return = error "return for AppM not implemented"
+  return = pure
 
   (>>=) :: AppM a -> (a -> AppM b) -> AppM b
-  (>>=)  = error "bind for AppM not implemented"
+  (>>=)  (AppM a) f = AppM $ (\env ->
+    a env >>= (\a' -> case a' of
+                        Right a'' -> runAppM (f a'') env
+                        Left e -> return $ Left e))
 
 instance MonadIO AppM where
   liftIO :: IO a -> AppM a
-  liftIO = error "liftIO for AppM not implemented"
+  liftIO a = AppM $ (\_ -> Right <$> a)
 
 instance MonadReader Env AppM where
   ask :: AppM Env
-  ask = error "ask for AppM not implemented"
+  ask = AppM (\env -> return $ Right env)
 
   local :: (Env -> Env) -> AppM a -> AppM a
-  local = error "local for AppM not implemented"
+  local f a = AppM (\env -> runAppM a (f env))
 
   reader :: (Env -> a) -> AppM a
-  reader = error "reader for AppM not implemented"
+  reader f = AppM (\env -> return $ Right (f env))
 
 instance MonadError Error AppM where
   throwError :: Error -> AppM a
-  throwError = error "throwError for AppM not implemented"
+  throwError e = AppM (\_ -> return $ Left e)
 
   catchError :: AppM a -> (Error -> AppM a) -> AppM a
-  catchError = error "catchError for AppM not implemented"
+  catchError a _ = a
 
 -- This is a helper function that will `lift` an Either value into our new AppM
 -- by applying `throwError` to the Left value, and using `pure` to lift the
@@ -113,5 +120,5 @@ instance MonadError Error AppM where
 liftEither
   :: Either Error a
   -> AppM a
-liftEither =
-  error "throwLeft not implemented"
+liftEither (Right a) = pure a
+liftEither (Left e) = throwError e
