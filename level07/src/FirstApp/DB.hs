@@ -35,7 +35,7 @@ import           FirstApp.Types                     (Comment, CommentText,
                                                      getCommentText, getTopic,
                                                      mkTopic)
 
-import           FirstApp.AppM                      (AppM, envDB, liftEither)
+import           FirstApp.AppM                      (AppM(AppM), envDB, liftEither)
 
 -- Quick helper to pull the connection and close it down.
 closeDB
@@ -70,29 +70,49 @@ runDB
   :: (a -> Either Error b)
   -> (Connection -> IO a)
   -> AppM b
-runDB =
-  error "Copy your completed 'runDB' and refactor to match the new type signature"
+runDB f q = getDBConn >>= q' >>= f'
+    where f' = fmap liftEither f
+          q' = fmap liftIO q
 
 getComments
   :: Topic
   -> AppM [Comment]
-getComments =
-  error "Copy your completed 'getComments' and refactor to match the new type signature"
+getComments t =
+  let
+    q = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
+  in
+    runDB (traverse fromDbComment)
+          (\conn -> Sql.query conn q (Sql.Only . getTopic $ t))
 
 addCommentToTopic
   :: Topic
   -> CommentText
   -> AppM ()
-addCommentToTopic =
-  error "Copy your completed 'appCommentToTopic' and refactor to match the new type signature"
+addCommentToTopic t c =
+  let
+    q = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
+  in runDB Right
+           (\conn -> getCurrentTime >>=
+                    (\nowish -> Sql.execute conn
+                                            q
+                                            (getTopic t, getCommentText c, nowish)))
+
 
 getTopics
   :: AppM [Topic]
 getTopics =
-  error "Copy your completed 'getTopics' and refactor to match the new type signature"
+  let
+    q = "SELECT DISTINCT topic FROM comments"
+  in
+    runDB (traverse $ mkTopic . Sql.fromOnly)
+          (\conn -> Sql.query_ conn q)
 
 deleteTopic
   :: Topic
   -> AppM ()
-deleteTopic =
-  error "Copy your completed 'deleteTopic' and refactor to match the new type signature"
+deleteTopic t =
+  let
+    q = "DELETE FROM comments WHERE topic = ?"
+  in
+    runDB Right
+          (\conn -> Sql.execute conn q (Sql.Only . getTopic $ t))

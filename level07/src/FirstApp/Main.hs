@@ -8,6 +8,8 @@ module FirstApp.Main
 import           Control.Monad.Except               (ExceptT (ExceptT),
                                                      runExceptT)
 import           Control.Monad.IO.Class             (liftIO)
+import           Control.Monad                      (join)
+import           Control.Applicative                (liftA2)
 
 import           Network.Wai                        (Application, Request,
                                                      Response, pathInfo,
@@ -74,14 +76,16 @@ runApp = do
 -- Either value.
 prepareAppReqs
   :: IO (Either StartUpError Env)
-prepareAppReqs =
-  error "Copy your completed 'prepareAppReqs' and refactor to match the new type signature"
+prepareAppReqs = do
+    cfgE <- runExceptT initConf
+    dbE <- join <$> (runExceptT $ traverse initDB cfgE)
+    pure $ liftA2 (Env logToErr) cfgE dbE
   where
     logToErr :: Text -> AppM ()
     logToErr = liftIO . hPutStrLn stderr
 
     toStartUpErr :: (a -> StartUpError) -> IO (Either a c) -> ExceptT StartUpError IO c
-    toStartUpErr = error "toStartUpErr not reimplemented"
+    toStartUpErr err res = ExceptT $ fmap (first err) res
 
     -- Take our possibly failing configuration/db functions with their unique
     -- error types and turn them into a consistently typed ExceptT. We can then
